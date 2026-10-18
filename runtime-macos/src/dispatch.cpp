@@ -14,6 +14,9 @@ extern XrResult xrGetSystem_impl(XrInstance, const XrSystemGetInfo*, XrSystemId*
 extern XrResult xrGetSystemProperties_impl(XrInstance, XrSystemId, XrSystemProperties*) noexcept;
 extern XrResult xrEnumerateViewConfigurations_impl(
     XrInstance, XrSystemId, uint32_t, uint32_t*, XrViewConfigurationType*) noexcept;
+extern XrResult xrGetViewConfigurationProperties_impl(
+    XrInstance, XrSystemId, XrViewConfigurationType,
+    XrViewConfigurationProperties*) noexcept;
 extern XrResult xrEnumerateViewConfigurationViews_impl(
     XrInstance, XrSystemId, XrViewConfigurationType, uint32_t, uint32_t*,
     XrViewConfigurationView*) noexcept;
@@ -129,11 +132,15 @@ XrResult getInstanceProcAddr(XrInstance instance, const char* name,
       {"xrGetSystem", toPfn(xrGetSystem_impl)},
       {"xrGetSystemProperties", toPfn(xrGetSystemProperties_impl)},
       {"xrEnumerateViewConfigurations", toPfn(xrEnumerateViewConfigurations_impl)},
+      {"xrGetViewConfigurationProperties",
+       toPfn(xrGetViewConfigurationProperties_impl)},
       {"xrEnumerateViewConfigurationViews",
        toPfn(xrEnumerateViewConfigurationViews_impl)},
       {"xrEnumerateEnvironmentBlendModes",
        toPfn(xrEnumerateEnvironmentBlendModes_impl)},
       {"xrGetMetalGraphicsRequirementsKHR",
+       toPfn(xrGetMetalGraphicsRequirementsKHR_impl)},
+      {"xrGetMetalGraphicsRequirementsKHRX2",
        toPfn(xrGetMetalGraphicsRequirementsKHR_impl)},
       {"xrGetReferenceSpaceBoundsRect",
        toPfn(xrGetReferenceSpaceBoundsRect_impl)},

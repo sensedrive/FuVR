@@ -100,6 +100,9 @@ const fuvr::runtime::DeviceCapabilities& tryRefreshDeviceCaps() noexcept {
 
 const char* kSupportedExtensions[] = {
     "XR_KHR_metal_enable",
+    // Pre-ratification alias required by Unity's OpenXR plugin (1.18) on
+    // macOS; same structure type values and layouts as XR_KHR_metal_enable.
+    "XR_KHRX2_metal_enable",
     "XR_KHR_vulkan_enable2",
     "XR_FUVR_metal_enable",
     "XR_EXT_hand_tracking",
@@ -305,6 +308,23 @@ XrResult xrEnumerateViewConfigurations_impl(
   }
   types[0] = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
   *countOutput = 1;
+  return XR_SUCCESS;
+}
+
+XrResult xrGetViewConfigurationProperties_impl(
+    XrInstance instance, XrSystemId systemId, XrViewConfigurationType type,
+    XrViewConfigurationProperties* props) noexcept {
+  if (lookupInstance(instance) == nullptr || systemId != kSystemId ||
+      props == nullptr) {
+    return XR_ERROR_HANDLE_INVALID;
+  }
+  if (type != XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO) {
+    return XR_ERROR_VIEW_CONFIGURATION_TYPE_UNSUPPORTED;
+  }
+  props->viewConfigurationType = type;
+  // The Quest compositor reprojects with the FOV it reported; apps may not
+  // change it.
+  props->fovMutable = XR_FALSE;
   return XR_SUCCESS;
 }
 
