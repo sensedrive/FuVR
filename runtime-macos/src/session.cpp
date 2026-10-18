@@ -450,13 +450,15 @@ XrResult xrEndFrame_impl(XrSession sessionHandle,
       uint32_t idx{0};
       bool valid{false};
     };
-    auto resolveSwapchain = [&](XrSwapchain handle) -> ResolvedImage {
+    auto resolveSwapchain = [&](XrSwapchain handle,
+                                uint32_t arrayIndex = 0) -> ResolvedImage {
       for (auto& sc : s->swapchains) {
         if (sc->handle != handle) continue;
         if (sc->images.empty()) return {};
         const uint32_t idx = sc->lastReleasedIndex %
                              static_cast<uint32_t>(sc->images.size());
-        return {sc->images[idx]->surface, sc->images[idx]->mtlTexture,
+        const IOSurfaceImage& img = *sc->images[idx];
+        return {img.surface, img.textureForArrayIndex(arrayIndex),
                 sc->width, sc->height, sc.get(), idx, true};
       }
       return {};
@@ -490,8 +492,10 @@ XrResult xrEndFrame_impl(XrSession sessionHandle,
           // splits it back into [0,0.5] / [0.5,1] u-ranges per eye (see
           // quest-app/.../eye_blit.cpp).
           if (proj->viewCount >= 2) {
-            ResolvedImage L = resolveSwapchain(proj->views[0].subImage.swapchain);
-            ResolvedImage R = resolveSwapchain(proj->views[1].subImage.swapchain);
+            ResolvedImage L = resolveSwapchain(proj->views[0].subImage.swapchain,
+                                               proj->views[0].subImage.imageArrayIndex);
+            ResolvedImage R = resolveSwapchain(proj->views[1].subImage.swapchain,
+                                               proj->views[1].subImage.imageArrayIndex);
             // Pull the per-image FOV that xrReleaseSwapchainImage stamped
             // onto these specific images. Each released image carries the
             // FOV xrLocateViews returned for its eye at render time, so

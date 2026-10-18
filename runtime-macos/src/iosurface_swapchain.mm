@@ -9,6 +9,10 @@
 namespace fuvr::runtime {
 
 IOSurfaceImage::~IOSurfaceImage() {
+  for (void* slice : sliceTextures) {
+    CFRelease(static_cast<CFTypeRef>(slice));
+  }
+  sliceTextures.clear();
   if (mtlTexture) {
     CFRelease(static_cast<CFTypeRef>(mtlTexture));
     mtlTexture = nullptr;
@@ -20,19 +24,25 @@ IOSurfaceImage::~IOSurfaceImage() {
 }
 
 IOSurfaceImage::IOSurfaceImage(IOSurfaceImage&& other) noexcept
-    : surface(other.surface), mtlTexture(other.mtlTexture) {
+    : surface(other.surface),
+      mtlTexture(other.mtlTexture),
+      sliceTextures(std::move(other.sliceTextures)) {
   other.surface = nullptr;
   other.mtlTexture = nullptr;
+  other.sliceTextures.clear();
 }
 
 IOSurfaceImage& IOSurfaceImage::operator=(IOSurfaceImage&& other) noexcept {
   if (this != &other) {
+    for (void* slice : sliceTextures) CFRelease(static_cast<CFTypeRef>(slice));
     if (mtlTexture) CFRelease(static_cast<CFTypeRef>(mtlTexture));
     if (surface) CFRelease(surface);
     surface = other.surface;
     mtlTexture = other.mtlTexture;
+    sliceTextures = std::move(other.sliceTextures);
     other.surface = nullptr;
     other.mtlTexture = nullptr;
+    other.sliceTextures.clear();
   }
   return *this;
 }
@@ -85,6 +95,55 @@ std::vector<std::unique_ptr<IOSurfaceImage>> allocateIOSurfaceSwapchain(
 
   if (ownsDevice) {
     // device gets released when the local id<MTLDevice> goes out of scope (ARC).
+  }
+  return out;
+}
+
+std::vector<std::unique_ptr<IOSurfaceImage>> allocateArraySwapchain(
+    void* devicePtr, uint32_t width, uint32_t height, uint32_t arrayLength,
+    uint32_t count) noexcept {
+  std::vector<std::unique_ptr<IOSurfaceImage>> out;
+  if (width == 0 || height == 0 || arrayLength == 0 || count == 0) return out;
+
+  id<MTLDevice> device = (__bridge id<MTLDevice>)devicePtr;
+  if (device == nil) device = MTLCreateSystemDefaultDevice();
+  if (device == nil) return out;
+
+  MTLTextureDescriptor* desc = [MTLTextureDescriptor
+      texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                   width:width
+                                  height:height
+                               mipmapped:NO];
+  desc.textureType = MTLTextureType2DArray;
+  desc.arrayLength = arrayLength;
+  // PixelFormatView: apps create sRGB / per-slice views of swapchain images.
+  desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead |
+               MTLTextureUsagePixelFormatView;
+  desc.storageMode = MTLStorageModePrivate;
+
+  for (uint32_t i = 0; i < count; ++i) {
+    id<MTLTexture> tex = [device newTextureWithDescriptor:desc];
+    if (tex == nil) {
+      out.clear();
+      break;
+    }
+    auto img = std::make_unique<IOSurfaceImage>();
+    img->sliceTextures.reserve(arrayLength);
+    for (uint32_t slice = 0; slice < arrayLength; ++slice) {
+      id<MTLTexture> view =
+          [tex newTextureViewWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                 textureType:MTLTextureType2D
+                                      levels:NSMakeRange(0, 1)
+                                      slices:NSMakeRange(slice, 1)];
+      if (view == nil) break;
+      img->sliceTextures.push_back((void*)CFBridgingRetain(view));
+    }
+    if (img->sliceTextures.size() != arrayLength) {
+      out.clear();
+      break;
+    }
+    img->mtlTexture = (void*)CFBridgingRetain(tex);
+    out.push_back(std::move(img));
   }
   return out;
 }

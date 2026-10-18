@@ -13,9 +13,22 @@ namespace fuvr::runtime {
 // Owns an IOSurface + companion MTLTexture (as `void*` to keep the header
 // pure C++). The MTLTexture is retained; the IOSurfaceRef is retained by
 // CFRetain. Both released in the destructor.
+//
+// Array swapchains (XrSwapchainCreateInfo::arraySize > 1, e.g. multiview
+// renderers such as Godot) have no IOSurface: `mtlTexture` is a private
+// MTLTextureType2DArray and `sliceTextures[i]` is a retained 2D view of
+// slice i, which the compositor consumes like a per-eye image.
 struct IOSurfaceImage {
   IOSurfaceRef surface{nullptr};
   void* mtlTexture{nullptr};  // id<MTLTexture> — strong reference
+  std::vector<void*> sliceTextures;  // id<MTLTexture> per slice — strong refs
+
+  // Texture for `arrayIndex` as submitted in XrSwapchainSubImage.
+  void* textureForArrayIndex(uint32_t arrayIndex) const noexcept {
+    if (sliceTextures.empty()) return mtlTexture;
+    return arrayIndex < sliceTextures.size() ? sliceTextures[arrayIndex]
+                                             : nullptr;
+  }
 
   IOSurfaceImage() = default;
   ~IOSurfaceImage();
@@ -30,6 +43,13 @@ struct IOSurfaceImage {
 // Returns empty vector on failure.
 std::vector<std::unique_ptr<IOSurfaceImage>> allocateIOSurfaceSwapchain(
     void* device, uint32_t width, uint32_t height, uint32_t count) noexcept;
+
+// Allocate `count` private BGRA8 2D-array textures with `arrayLength` slices
+// plus one 2D view per slice (no IOSurface backing). Returns empty vector on
+// failure.
+std::vector<std::unique_ptr<IOSurfaceImage>> allocateArraySwapchain(
+    void* device, uint32_t width, uint32_t height, uint32_t arrayLength,
+    uint32_t count) noexcept;
 
 // Create a mach send-right for an IOSurface. Returns 0 (MACH_PORT_NULL) on
 // failure. Caller-owns the right; transferring it via SCM_RIGHTS gives

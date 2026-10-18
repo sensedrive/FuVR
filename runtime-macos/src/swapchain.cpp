@@ -85,8 +85,13 @@ XrResult xrCreateSwapchain_impl(XrSession sessionHandle,
   sc->height = info->height;
   sc->format = info->format;
   sc->arraySize = info->arraySize;
-  sc->images = allocateIOSurfaceSwapchain(s->metalDevice, info->width,
-                                          info->height, 3);
+  // Multiview apps (arraySize > 1) render both eyes into one array texture;
+  // xrEndFrame picks the slice via XrSwapchainSubImage::imageArrayIndex.
+  sc->images = info->arraySize > 1
+                   ? allocateArraySwapchain(s->metalDevice, info->width,
+                                            info->height, info->arraySize, 3)
+                   : allocateIOSurfaceSwapchain(s->metalDevice, info->width,
+                                                info->height, 3);
   if (sc->images.empty()) {
     return XR_ERROR_OUT_OF_MEMORY;
   }

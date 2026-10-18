@@ -37,13 +37,14 @@ class CapturingSink final : public fr::FrameSink {
   }
 };
 
-XrSwapchain createSc(XrSession sess, uint32_t w, uint32_t h) {
+XrSwapchain createSc(XrSession sess, uint32_t w, uint32_t h,
+                     uint32_t arraySize = 1) {
   XrSwapchainCreateInfo info{};
   info.type = XR_TYPE_SWAPCHAIN_CREATE_INFO;
   info.width = w;
   info.height = h;
   info.format = 37;
-  info.arraySize = 1;
+  info.arraySize = arraySize;
   info.faceCount = 1;
   info.mipCount = 1;
   info.sampleCount = 1;
@@ -119,6 +120,65 @@ TEST(EndFrame, WalksAllProjectionAndQuadLayers) {
   EXPECT_EQ(f.extraLayers.size(), 1u);
   EXPECT_NE(f.extraLayers.front(), nullptr);
   EXPECT_NE(f.ioSurface, f.extraLayers.front());
+
+  fr::xrDestroySession_impl(sess);
+  fr::xrDestroyInstance_impl(inst);
+}
+
+// Multiview apps (Godot) submit one arraySize=2 swapchain and address the
+// eyes via imageArrayIndex; each eye must resolve to its own slice.
+TEST(EndFrame, ArraySwapchainResolvesOneSlicePerEye) {
+  XrInstanceCreateInfo ici{};
+  ici.type = XR_TYPE_INSTANCE_CREATE_INFO;
+  XrInstance inst = XR_NULL_HANDLE;
+  ASSERT_EQ(fr::xrCreateInstance_impl(&ici, &inst), XR_SUCCESS);
+  XrSessionCreateInfo sci{};
+  sci.type = XR_TYPE_SESSION_CREATE_INFO;
+  XrSession sess = XR_NULL_HANDLE;
+  ASSERT_EQ(fr::xrCreateSession_impl(inst, &sci, &sess), XR_SUCCESS);
+
+  fr::Session* s = fr::lookupSession(sess);
+  ASSERT_NE(s, nullptr);
+  auto sink = std::make_unique<CapturingSink>();
+  CapturingSink* raw = sink.get();
+  s->frameSink = std::move(sink);
+
+  XrSwapchain sc = createSc(sess, 256, 128, 2);
+  ASSERT_NE(sc, XR_NULL_HANDLE);
+  uint32_t idx = 0;
+  fr::xrAcquireSwapchainImage_impl(sc, nullptr, &idx);
+  fr::xrReleaseSwapchainImage_impl(sc, nullptr);
+  fr::xrBeginFrame_impl(sess, nullptr);
+
+  XrCompositionLayerProjectionView views[2]{};
+  for (uint32_t eye = 0; eye < 2; ++eye) {
+    views[eye].type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW;
+    views[eye].subImage.swapchain = sc;
+    views[eye].subImage.imageArrayIndex = eye;
+    views[eye].subImage.imageRect.extent.width = 256;
+    views[eye].subImage.imageRect.extent.height = 128;
+    views[eye].pose.orientation.w = 1.0f;
+  }
+  XrCompositionLayerProjection proj{};
+  proj.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION;
+  proj.viewCount = 2;
+  proj.views = views;
+  const XrCompositionLayerBaseHeader* layers[1] = {
+      reinterpret_cast<const XrCompositionLayerBaseHeader*>(&proj)};
+  XrFrameEndInfo end{};
+  end.type = XR_TYPE_FRAME_END_INFO;
+  end.displayTime = 1000;
+  end.layerCount = 1;
+  end.layers = layers;
+  ASSERT_EQ(fr::xrEndFrame_impl(sess, &end), XR_SUCCESS);
+
+  ASSERT_EQ(raw->frames.size(), 1u);
+  const auto& f = raw->frames.front();
+  EXPECT_NE(f.ioSurface, nullptr);
+  EXPECT_EQ(f.width, 512u);
+  EXPECT_NE(f.leftMetalTexture, nullptr);
+  EXPECT_NE(f.rightMetalTexture, nullptr);
+  EXPECT_NE(f.leftMetalTexture, f.rightMetalTexture);
 
   fr::xrDestroySession_impl(sess);
   fr::xrDestroyInstance_impl(inst);
