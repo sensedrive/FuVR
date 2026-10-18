@@ -17,7 +17,8 @@ find_package(OpenXR REQUIRED CONFIG)
 # widely-available `eclipse-capnproto:capnp-android` prefab exists, and
 # building from a pinned source tarball keeps the runtime version in tree.
 # ---------------------------------------------------------------------------
-set(CAPNP_VERSION "1.3.0")
+# Must match the capnp compiler that generated proto_gen/ (header checks CAPNP_VERSION == 1005000).
+set(CAPNP_VERSION "1.5.0")
 set(CAPNP_PREFIX  "${CMAKE_BINARY_DIR}/capnp")
 set(CAPNP_INSTALL "${CAPNP_PREFIX}/install")
 

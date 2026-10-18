@@ -129,6 +129,7 @@ target_link_libraries(fuvr-runtime-metrics PRIVATE
   fuvr_openxr_headers
   fuvr_inprocess_handoff
   "-framework Metal"
+  "-framework MetalFX"
   "-framework IOSurface"
   "-framework CoreFoundation"
   "-framework Foundation"
